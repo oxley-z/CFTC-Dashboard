@@ -238,48 +238,123 @@ def _flow_state(z_dlong, z_dshort):
         return '多头平仓'
     return ''
 
+import json
+import urllib.request
+import urllib.parse
+
+def fetch_sina_market_kline(symbol, channel="us"):
+    """
+    通用免密行情直连引擎：
+    彻底绕过 Yahoo Finance 频控拉黑限制，支持外汇、期货、美股/ETF、全球指数。
+    """
+    if channel == "futures":
+        # 新浪全球商品期货日K (原油、黄金、白银、铜、天然气、玉米)
+        url = f"https://stock2.finance.sina.com.cn/futures/api/jsonp.php/var%20_{symbol}=/GlobalFuturesService.getGlobalFuturesDailyKLine?symbol={symbol}&_={int(time.time()*1000)}"
+    elif channel == "forex":
+        # 新浪外汇/汇率日K (欧元、英镑、日元、澳元等)
+        url = f"https://vip.stock.finance.sina.com.cn/forex/api/jsonp.php/var%20_{symbol}=/NewForexService.getDayKLine?symbol={symbol}&_={int(time.time()*1000)}"
+    else:
+        # 新浪美股/ETF/全球指数日K
+        url = f"https://stock.finance.sina.com.cn/usstock/api/jsonp.php/IO.XSRV2.CallbackList['kline']/US_MinKService.getDailyK?symbol={symbol}&_={int(time.time()*1000)}"
+
+    req = urllib.request.Request(url, headers={
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Referer": "https://finance.sina.com.cn/"
+    })
+
+    try:
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            content = resp.read().decode('utf-8', errors='ignore')
+            start_idx = content.find('([')
+            end_idx = content.rfind('])')
+            if start_idx != -1 and end_idx != -1:
+                json_str = content[start_idx + 1: end_idx + 1]
+                data = json.loads(json_str)
+                df = pd.DataFrame(data)
+                if not df.empty:
+                    # 兼容不同接口的字段名 (d: 日期, c: 收盘价)
+                    date_col = 'd' if 'd' in df.columns else ('date' if 'date' in df.columns else None)
+                    close_col = 'c' if 'c' in df.columns else ('close' if 'close' in df.columns else None)
+                    if date_col and close_col:
+                        df['date'] = pd.to_datetime(df[date_col])
+                        df['close'] = pd.to_numeric(df[close_col], errors='coerce')
+                        df = df.dropna(subset=['close']).sort_values('date')
+                        return df.set_index('date')['close']
+    except Exception:
+        pass
+    return None
+
 
 def fetch_tue_tue_returns(contracts, cftc_date):
-    """获取 CFTC 同期 Tue→Tue 价格变动 (上周二→本周二)"""
+    """
+    获取 CFTC 同期 Tue→Tue 价格变动
+    全品种免密路由分发，彻底杜绝 429 Rate limited 报错
+    """
     results = {}
     tue_end = pd.Timestamp(cftc_date)
     tue_start = tue_end - timedelta(days=7)
-    fetch_start = (tue_start - timedelta(days=5)).strftime('%Y-%m-%d')
-    fetch_end = (tue_end + timedelta(days=3)).strftime('%Y-%m-%d')
 
-    tickers = {c['name']: c.get('yf') for c in contracts if c.get('yf')}
-    for name, ticker in tickers.items():
-        for attempt in range(3):
-            try:
-                data = yf.download(ticker, start=fetch_start, end=fetch_end,
-                                   interval='1d', progress=False)
-                if data is None or len(data) < 2:
-                    break
-                if isinstance(data.columns, pd.MultiIndex):
-                    close = data[('Close', ticker)]
-                else:
-                    close = data['Close']
-                close = close.dropna()
-                px_end = close[close.index <= tue_end]
-                px_start = close[close.index <= tue_start]
-                if len(px_end) > 0 and len(px_start) > 0:
-                    p1 = float(px_start.iloc[-1])
-                    p2 = float(px_end.iloc[-1])
-                    d1 = px_start.index[-1].strftime('%m/%d')
-                    d2 = px_end.index[-1].strftime('%m/%d')
-                    ret = (p2 / p1 - 1) * 100
-                    results[name] = {
-                        'ret': round(ret, 2),
-                        'ticker': ticker,
-                        'date_start': d1,
-                        'date_end': d2,
-                        'px_start': p1,
-                        'px_end': p2,
-                    }
-                break
-            except Exception:
-                if attempt < 2:
-                    time.sleep(2)
+    # 21 个核心资产的全通道映射配置字典
+    ROUTE_MAP = {
+        # 股指
+        '^GSPC':     {'sym': '.INX',     'channel': 'us'},       # 标普500
+        '^NDX':      {'sym': '.IXIC',    'channel': 'us'},       # 纳斯达克 (代理纳指100)
+        '^RUT':      {'sym': 'IWM',      'channel': 'us'},       # 罗素2000 ETF代理
+        'EEM':       {'sym': 'EEM',      'channel': 'us'},       # MSCI新兴市场ETF
+        'EFA':       {'sym': 'EFA',      'channel': 'us'},       # MSCI发达市场ETF
+        '^N225':     {'sym': '.N225',    'channel': 'us'},       # 日经225指数
+
+        # 债券与利率期货 (使用高流动性、高度拟合的基准美债ETF替代)
+        'ZT=F':      {'sym': 'SHY',      'channel': 'us'},       # 2年期美债代理
+        'ZN=F':      {'sym': 'IEF',      'channel': 'us'},       # 10年期美债代理
+        'UB=F':      {'sym': 'TLT',      'channel': 'us'},       # 20+年超长期美债代理
+        'ZQ=F':      {'sym': 'SHV',      'channel': 'us'},       # 短期利率/联邦基金代理
+
+        # 外汇与加密
+        'EURUSD=X':  {'sym': 'fx_seurusd', 'channel': 'forex'},    # 欧元/美元
+        'GBPUSD=X':  {'sym': 'fx_sgbpusd', 'channel': 'forex'},    # 英镑/美元
+        'JPYUSD=X':  {'sym': 'fx_sjpyusd', 'channel': 'forex'},    # 日元/美元
+        'AUDUSD=X':  {'sym': 'fx_saudusd', 'channel': 'forex'},    # 澳元/美元
+        'BTC-USD':   {'sym': 'BTCUSD',     'channel': 'us'},       # 比特币现货
+
+        # 大宗商品期货
+        'CL=F':      {'sym': 'hf_CL',    'channel': 'futures'},  # WTI原油
+        'NG=F':      {'sym': 'hf_NG',    'channel': 'futures'},  # 天然气
+        'HG=F':      {'sym': 'hf_HG',    'channel': 'futures'},  # 铜
+        'GC=F':      {'sym': 'hf_GC',    'channel': 'futures'},  # 黄金
+        'SI=F':      {'sym': 'hf_SI',    'channel': 'futures'},  # 白银
+        'ZC=F':      {'sym': 'hf_C',     'channel': 'futures'},  # 玉米
+    }
+
+    for c in contracts:
+        yf_ticker = c.get('yf')
+        name = c['name']
+        if not yf_ticker:
+            continue
+
+        route = ROUTE_MAP.get(yf_ticker)
+        if not route:
+            continue
+
+        close_series = fetch_sina_market_kline(route['sym'], route['channel'])
+        if close_series is not None and not close_series.empty:
+            px_end = close_series[close_series.index <= tue_end]
+            px_start = close_series[close_series.index <= tue_start]
+            if len(px_end) > 0 and len(px_start) > 0:
+                p1 = float(px_start.iloc[-1])
+                p2 = float(px_end.iloc[-1])
+                d1 = px_start.index[-1].strftime('%m/%d')
+                d2 = px_end.index[-1].strftime('%m/%d')
+                ret = (p2 / p1 - 1) * 100
+                results[name] = {
+                    'ret': round(ret, 2),
+                    'ticker': yf_ticker,
+                    'date_start': d1,
+                    'date_end': d2,
+                    'px_start': p1,
+                    'px_end': p2,
+                }
+
     return results
 
 

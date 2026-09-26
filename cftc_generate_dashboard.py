@@ -23,24 +23,22 @@ DATA_EXPORT_FILE = os.path.join(DATA_DIR, "cftc_面板完整数据.json")
 
 # 针对不同资产配置最优的数据源映射策略
 ASSET_CONFIG = {
-    # 宏观利率 (真实收益率 %)
-    '2年期美债': {'type': 'us_yield', 'column': '美国国债收益率2年'},
-    '10年期美债': {'type': 'us_yield', 'column': '美国国债收益率10年'},
-    '超长期美债': {'type': 'us_yield', 'column': '美国国债收益率30年'},
+    # 宏观利率 (真实收益率 %，配置 ETF 降级保护)
+    '2年期美债': {'type': 'us_yield', 'column': '美国国债收益率2年', 'fallback_etf': 'SHY', 'desc': '2年期美债基准收益率'},
+    '10年期美债': {'type': 'us_yield', 'column': '美国国债收益率10年', 'fallback_etf': 'IEF', 'desc': '10年期美债基准收益率'},
+    '超长期美债': {'type': 'us_yield', 'column': '美国国债收益率30年', 'fallback_etf': 'TLT', 'desc': '超长期美债收益率/TLT代理'},
     
     # 外盘商品期货 (原味期货美元报价)
-    '黄金': {'type': 'futures', 'symbol': 'GC'},
-    '白银': {'type': 'futures', 'symbol': 'SI'},
-    '铜': {'type': 'futures', 'symbol': 'HG'},
-    'WTI原油': {'type': 'futures', 'symbol': 'CL'},
-    '天然气': {'type': 'futures', 'symbol': 'NG'},
-    '玉米': {'type': 'futures', 'symbol': 'C'},
+    '黄金': {'type': 'futures', 'symbol': 'GC', 'desc': '纽约黄金主力连续期货'},
+    '白银': {'type': 'futures', 'symbol': 'SI', 'desc': '纽约白银主力连续期货'},
+    '铜': {'type': 'futures', 'symbol': 'HG', 'desc': 'COMEX精铜连续期货'},
+    'WTI原油': {'type': 'futures', 'symbol': 'CL', 'desc': 'WTI原油主力连续期货'},
+    '天然气': {'type': 'futures', 'symbol': 'NG', 'desc': '纽约天然气连续期货'},
+    '玉米': {'type': 'futures', 'symbol': 'C', 'desc': 'CBOT玉米连续期货'},
     
     # 核心股指 (原生指数点数)
     '标普500': {'type': 'index_sina', 'symbol': '.INX', 'fallback_etf': 'SPY', 'desc': '标普500原生指数'},
     '纳斯达克100': {'type': 'index_sina', 'symbol': '.NDX', 'fallback_etf': 'QQQ', 'desc': '纳斯达克100原生指数'},
-    
-    # 【核心修复】日经225: 既然 MSCI 走 YFinance 成功，直接使用 YFinance 最稳定的原生指数通道 ^N225
     '日经225': {'type': 'yf_index', 'symbol': '^N225', 'fallback_etf': 'EWJ', 'desc': '日经225原生指数 (^N225)'},
     
     # MSCI 官方原生代码
@@ -89,6 +87,7 @@ def clean_number(text):
         return 0
 
 def parse_html_file(filepath):
+    """解析生成的单期持仓 HTML 报告"""
     match = re.search(r'\d{4}-\d{2}-\d{2}', filepath)
     if not match: return []
     date_str = match.group()
@@ -98,10 +97,14 @@ def parse_html_file(filepath):
         with open(filepath, 'r', encoding='utf-8') as f:
             soup = BeautifulSoup(f, 'html.parser')
             for row in soup.find_all('tr'):
+                # 排除表头行和 section 导航行
+                if row.find('th') or row.get('class') == ['section-row']:
+                    continue
                 cols = row.find_all('td')
-                if len(cols) >= 11 and not cols[0].has_attr('colspan'):
+                if len(cols) >= 10 and not cols[0].has_attr('colspan'):
                     asset_name = cols[0].text.strip()
-                    if asset_name:
+                    # 匹配资产并提取持仓数据
+                    if asset_name in ASSET_CONFIG:
                         data_list.append({
                             'Date': date_str,
                             'Asset': asset_name,
@@ -151,21 +154,9 @@ def enrich_with_prices(df):
             close_px = pd.Series(dtype=float)
             
             try:
-                # --- 策略 A: 自定义直连多级 API (专为最顽固资产设计) ---
+                # --- 策略 A: 自定义直连多级 API ---
                 if cfg['type'] == 'custom_api':
-                    
-                    if cfg['api_source'] == 'sina_global':
-                        try:
-                            url = f"https://vip.stock.finance.sina.com.cn/api/json_v2.php/GlobalMarketService.getGlobalIndexDaily?symbol={cfg['symbol']}"
-                            resp = requests.get(url, timeout=10).json()
-                            tmp_df = pd.DataFrame(resp)
-                            if not tmp_df.empty and 'date' in tmp_df.columns and 'close' in tmp_df.columns:
-                                tmp_df['date'] = pd.to_datetime(tmp_df['date'])
-                                tmp_df.set_index('date', inplace=True)
-                                close_px = tmp_df['close'].astype(float).dropna()
-                        except Exception: pass
-                        
-                    elif cfg['api_source'] == 'crypto_multi':
+                    if cfg['api_source'] == 'crypto_multi':
                         success = False
                         # 1级火箭: Binance
                         try:
@@ -241,7 +232,7 @@ def enrich_with_prices(df):
                             hist.set_index('date', inplace=True)
                             close_px = hist['close'].astype(float).dropna()
 
-                # --- 策略 E: Yahoo Finance 原生资源 (包含 MSCI 与 日经225) ---
+                # --- 策略 E: Yahoo Finance 原生资源 ---
                 elif cfg['type'] in ['yf_asset', 'yf_index']:
                     try:
                         ticker_obj = yf.Ticker(cfg['symbol'])
@@ -261,17 +252,20 @@ def enrich_with_prices(df):
                             hist.set_index('date', inplace=True)
                             close_px = hist['close'].astype(float).dropna()
 
-                # --- 防断连终极降级保护 ---
-                if close_px.empty and cfg.get('fallback_etf'):
-                    sys.stdout.write(f" [原生抓取失败, 降级 ETF: {cfg['fallback_etf']}] ")
+                # --- 防断连终极降级保护 (支持国债 ETF 降级如 TLT/IEF) ---
+                if (close_px.empty or len(close_px) == 0) and cfg.get('fallback_etf'):
+                    sys.stdout.write(f" [降级拉取对应 ETF: {cfg['fallback_etf']}] ")
                     sys.stdout.flush()
-                    hist = ak.stock_us_daily(symbol=cfg['fallback_etf'], adjust="qfq")
-                    if not hist.empty:
-                        hist.columns = [str(c).lower() for c in hist.columns]
-                        if 'date' in hist.columns and 'close' in hist.columns:
-                            hist['date'] = pd.to_datetime(hist['date'])
-                            hist.set_index('date', inplace=True)
-                            close_px = hist['close'].astype(float).dropna()
+                    try:
+                        hist = ak.stock_us_daily(symbol=cfg['fallback_etf'], adjust="qfq")
+                        if not hist.empty:
+                            hist.columns = [str(c).lower() for c in hist.columns]
+                            if 'date' in hist.columns and 'close' in hist.columns:
+                                hist['date'] = pd.to_datetime(hist['date'])
+                                hist.set_index('date', inplace=True)
+                                close_px = hist['close'].astype(float).dropna()
+                    except Exception:
+                        pass
 
                 # 存入缓存
                 if not close_px.empty:
@@ -311,9 +305,14 @@ def enrich_with_prices(df):
     print(f"\n✅ 数据准备完毕！价格数据已自动持久化至: {PRICE_CACHE_FILE}")
     return df
 
+# 修改后:
 def generate_dashboard(df):
     df = df.sort_values(['Asset', 'Date'])
-    assets = sorted(df['Asset'].unique().tolist())
+    
+    # 按照 ASSET_CONFIG 中定义的自然顺序排列（确保 10年期美债紧跟超长期美债）
+    all_unique = df['Asset'].unique().tolist()
+    config_order = list(ASSET_CONFIG.keys())
+    assets = [a for a in config_order if a in all_unique] + [a for a in all_unique if a not in config_order]
     
     full_data = {}
     for asset in assets:
@@ -376,7 +375,7 @@ def generate_dashboard(df):
 <body>
     <div id="sidebar">
         <div class="search-box">
-            <input type="text" id="assetSearch" placeholder="🔍 搜索资产 (如: 日经, 黄金)">
+            <input type="text" id="assetSearch" placeholder="🔍 搜索资产 (如: 超长期美债, 10年期)">
         </div>
         <div id="assetList"></div>
     </div>
@@ -546,7 +545,7 @@ def generate_dashboard(df):
 
         renderAssetList();
         if (assetList.length > 0) {{
-            const defaultAsset = assetList.includes('日经225') ? '日经225' : assetList[0];
+            const defaultAsset = assetList.includes('超长期美债') ? '超长期美债' : (assetList.includes('10年期美债') ? '10年期美债' : assetList[0]);
             const btns = Array.from(document.querySelectorAll('.asset-btn'));
             const targetBtn = btns.find(b => b.innerText === defaultAsset) || btns[0];
             selectAsset(defaultAsset, targetBtn);

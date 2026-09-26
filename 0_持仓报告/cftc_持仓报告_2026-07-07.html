@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CFTC 持仓报告 - 2026-07-07</title>
+    <style>
+:root {
+    --blue: #4472C4; --blue-light: #D6E4F0; --orange: #C55A11;
+    --green-bg: #C6EFCE; --green-txt: #006100;
+    --red-bg: #FFC7CE; --red-txt: #9C0006;
+    --gray-border: #D9D9D9; --row-alt: #F8F9FA;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif; font-size: 13px;
+       color: #333; background: #fff; padding: 20px 30px; max-width: 1800px; margin: 0 auto; }
+header { border-bottom: 3px solid var(--orange); padding-bottom: 12px; margin-bottom: 24px;
+         display: flex; justify-content: space-between; align-items: flex-end; }
+header h1 { font-size: 22px; font-weight: 700; color: var(--orange); }
+header .meta { font-size: 12px; color: #666; text-align: right; }
+
+table { border-collapse: collapse; width: 100%; font-size: 12px; margin-bottom: 4px; }
+thead th { background: var(--blue); color: #fff; font-weight: 600; font-size: 11px;
+           padding: 7px 6px; text-align: center; border: 1px solid #3a62a0; white-space: nowrap; }
+thead th:first-child { text-align: left; }
+thead th.group-header { background: #3a62a0; border-bottom: 2px solid var(--orange); font-size: 12px; }
+tbody td { padding: 4px 6px; border: 1px solid var(--gray-border); text-align: right; white-space: nowrap; }
+tbody td:first-child { text-align: left; font-weight: 600; background: #FAFAFA; }
+tbody tr:nth-child(even) { background: var(--row-alt); }
+tbody tr:hover { background: #EBF0F7; }
+
+.section-row td { background: var(--blue-light) !important; font-weight: 700; color: var(--blue);
+                   padding: 6px 8px; font-size: 12px; }
+.pos { color: var(--green-txt); } .neg { color: var(--red-txt); }
+.pos-bg { background: var(--green-bg) !important; color: var(--green-txt); font-weight: 600; }
+.neg-bg { background: var(--red-bg) !important; color: var(--red-txt); font-weight: 600; }
+
+.zbar { position: relative; min-width: 50px; padding: 0 !important; text-align: center !important; overflow: hidden; }
+.zbar-inner { position: absolute; top: 1px; bottom: 1px; opacity: 0.35; }
+.zbar-pos { background: #00B050; left: 50%; } .zbar-neg { background: #FF0000; right: 50%; }
+.zbar-label { position: relative; z-index: 1; font-size: 11px; font-weight: 600; padding: 4px 3px; display: block; }
+
+.tag { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 10px; font-weight: 700; white-space: nowrap; }
+.tag-bull { background: #C6EFCE; color: #006100; }
+.tag-bear { background: #FFC7CE; color: #9C0006; }
+.tag-mixed { background: #FFF2CC; color: #7F6000; }
+.tag-crowded { background: #FCE4D6; color: #C55A11; }
+.tag-vcrowded { background: #F4B084; color: #833C0B; }
+.tag-extreme { background: #FF6347; color: #fff; }
+
+.divergence { background: #FFF3CD !important; border: 2px solid #FFCA2C !important; font-weight: 700; }
+
+.source { font-size: 10px; color: #999; margin-top: 4px; }
+.notes { font-size: 11px; color: #666; margin-top: 20px; padding: 12px 16px;
+         background: #F8F9FA; border-radius: 4px; border: 1px solid var(--gray-border); }
+.notes ul { margin: 6px 0 0 18px; } .notes li { margin-bottom: 3px; }
+
+@media print { body { padding: 10px; font-size: 11px; } }
+</style>
+</head>
+<body>
+    <header>
+        <h1>CFTC 期货持仓分析</h1>
+        <div class="meta">数据截止 2026-07-07<br>生成时间 2026-09-26 17:13<br>数据来源: CFTC Socrata API + yfinance</div>
+    </header>
+
+    <h3 style="color:var(--orange);margin-bottom:8px">杠杆基金 Leveraged Funds（TFF 报告）</h3>
+    <table>
+        <thead>
+            <tr>
+                <th rowspan="2">资产</th>
+                <th rowspan="2" class="group-header">同期涨跌</th>
+                <th colspan="3" class="group-header">净持仓</th>
+                <th colspan="3" class="group-header">多头</th>
+                <th colspan="3" class="group-header">空头</th>
+                <th rowspan="2" class="group-header">动作</th>
+                <th rowspan="2" class="group-header">拥挤度</th>
+            </tr>
+            <tr>
+        <th>净持仓</th><th>z</th><th>周变化</th>
+        <th>多头</th><th>z</th><th>周变化</th>
+        <th>空头</th><th>z</th><th>周变化</th>
+    </tr>
+        </thead>
+        <tbody><tr class="section-row"><td colspan="13">股指</td></tr><tr><td>标普500</td><td class="pos">+0.1%</td><td class="neg">-361,875</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:10%"></div><span class="zbar-label neg">-0.6</span></td><td class="neg">-1,406 (-0.0z)</td><td class="pos">134,932</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:10%"></div><span class="zbar-label neg">-0.6</span></td><td class="neg">-15,624 (-0.6z)</td><td class="pos">496,807</td><td class="zbar"><div class="zbar-inner zbar-pos" style="width:7%"></div><span class="zbar-label pos">0.4</span></td><td class="neg">-14,218 (-0.3z)</td><td></td><td></td></tr><tr><td>纳斯达克100</td><td class="neg divergence">-1.5%</td><td class="neg">-55,013</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:18%"></div><span class="zbar-label neg">-1.1</span></td><td class="pos">13,604 (1.2z)</td><td class="pos">49,681</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:5%"></div><span class="zbar-label neg">-0.3</span></td><td class="pos">12,885 (1.7z)</td><td class="pos">104,694</td><td class="zbar"><div class="zbar-inner zbar-pos" style="width:22%"></div><span class="zbar-label pos">1.3</span></td><td class="neg">-719 (-0.1z)</td><td><span class="tag tag-bull">多头建仓</span></td><td></td></tr><tr><td>罗素2000</td><td class="neg divergence">-1.4%</td><td class="neg">-72,262</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:17%"></div><span class="zbar-label neg">-1.0</span></td><td class="pos">12,096 (1.0z)</td><td class="pos">61,732</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:2%"></div><span class="zbar-label neg">-0.1</span></td><td class="neg">-823 (-0.0z)</td><td class="pos">133,994</td><td class="zbar"><div class="zbar-inner zbar-pos" style="width:20%"></div><span class="zbar-label pos">1.2</span></td><td class="neg">-12,919 (-1.3z)</td><td><span class="tag tag-bull">空头回补</span></td><td></td></tr><tr><td>MSCI新兴市场</td><td class="neg">-3.9%</td><td class="pos">40,476</td><td class="zbar"><div class="zbar-inner zbar-pos" style="width:7%"></div><span class="zbar-label pos">0.4</span></td><td class="neg">-26,089 (-1.2z)</td><td class="pos">133,665</td><td class="zbar"><div class="zbar-inner zbar-pos" style="width:3%"></div><span class="zbar-label pos">0.2</span></td><td class="neg">-13,228 (-1.2z)</td><td class="pos">93,189</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:8%"></div><span class="zbar-label neg">-0.5</span></td><td class="pos">12,861 (0.7z)</td><td></td><td></td></tr><tr><td>MSCI发达市场</td><td class="pos">+0.3%</td><td class="neg">-7,976</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:5%"></div><span class="zbar-label neg">-0.3</span></td><td class="neg">-1,671 (-0.2z)</td><td class="pos">34,963</td><td class="zbar"><div class="zbar-inner zbar-pos" style="width:8%"></div><span class="zbar-label pos">0.5</span></td><td class="pos">917 (0.2z)</td><td class="pos">42,939</td><td class="zbar"><div class="zbar-inner zbar-pos" style="width:12%"></div><span class="zbar-label pos">0.7</span></td><td class="pos">2,588 (0.4z)</td><td></td><td></td></tr><tr><td>日经225</td><td></td><td class="pos">1,712</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:3%"></div><span class="zbar-label neg">-0.2</span></td><td class="pos">538 (0.2z)</td><td class="pos">7,332</td><td class="zbar"><div class="zbar-inner zbar-pos" style="width:5%"></div><span class="zbar-label pos">0.3</span></td><td class="pos">1,430 (0.8z)</td><td class="pos">5,620</td><td class="zbar"><div class="zbar-inner zbar-pos" style="width:12%"></div><span class="zbar-label pos">0.7</span></td><td class="pos">892 (0.5z)</td><td></td><td></td></tr><tr class="section-row"><td colspan="13">债券</td></tr><tr><td>2年期美债</td><td class="neg">-0.3%</td><td class="neg">-1,756,528</td><td class="zbar"><div class="zbar-inner zbar-pos" style="width:17%"></div><span class="zbar-label pos">1.0</span></td><td class="neg">-7,653 (-0.1z)</td><td class="pos">339,905</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:15%"></div><span class="zbar-label neg">-0.9</span></td><td class="neg">-38,458 (-0.7z)</td><td class="pos">2,096,433</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:40%"></div><span class="zbar-label neg">-2.4</span></td><td class="neg">-30,805 (-0.4z)</td><td></td><td></td></tr><tr><td>10年期美债</td><td class="neg">-0.9%</td><td class="neg">-2,004,023</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:7%"></div><span class="zbar-label neg">-0.4</span></td><td class="neg">-34,172 (-0.3z)</td><td class="pos">417,214</td><td class="zbar"><div class="zbar-inner zbar-pos" style="width:8%"></div><span class="zbar-label pos">0.5</span></td><td class="pos">63,123 (1.3z)</td><td class="pos">2,421,237</td><td class="zbar"><div class="zbar-inner zbar-pos" style="width:10%"></div><span class="zbar-label pos">0.6</span></td><td class="pos">97,295 (1.1z)</td><td><span class="tag tag-mixed">多空双增</span></td><td></td></tr><tr><td>超长期美债</td><td class="neg">-2.2%</td><td class="neg">-920,648</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:8%"></div><span class="zbar-label neg">-0.5</span></td><td class="neg">-10,746 (-0.4z)</td><td class="pos">62,296</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:28%"></div><span class="zbar-label neg">-1.7</span></td><td class="neg">-25,570 (-3.0z)</td><td class="pos">982,944</td><td class="zbar"><div class="zbar-inner zbar-pos" style="width:3%"></div><span class="zbar-label pos">0.2</span></td><td class="neg">-14,824 (-0.8z)</td><td><span class="tag tag-mixed">多空双减</span></td><td></td></tr><tr class="section-row"><td colspan="13">利率</td></tr><tr><td>联邦基金</td><td class="neg">-0.2%</td><td class="neg">-273,170</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:10%"></div><span class="zbar-label neg">-0.6</span></td><td class="neg">-117,235 (-1.5z)</td><td class="pos">400,383</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:5%"></div><span class="zbar-label neg">-0.3</span></td><td class="neg">-10,283 (-0.1z)</td><td class="pos">673,553</td><td class="zbar"><div class="zbar-inner zbar-pos" style="width:12%"></div><span class="zbar-label pos">0.7</span></td><td class="pos">106,952 (1.2z)</td><td><span class="tag tag-bear">空头建仓</span></td><td></td></tr><tr class="section-row"><td colspan="13">外汇/加密</td></tr><tr><td>欧元/美元</td><td></td><td class="neg">-45,461</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:35%"></div><span class="zbar-label neg">-2.1</span></td><td class="neg">-12,817 (-1.2z)</td><td class="pos">87,460</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:12%"></div><span class="zbar-label neg">-0.7</span></td><td class="neg">-14,807 (-1.9z)</td><td class="pos">132,921</td><td class="zbar"><div class="zbar-inner zbar-pos" style="width:30%"></div><span class="zbar-label pos">1.8</span></td><td class="neg">-1,990 (-0.3z)</td><td><span class="tag tag-bear">多头平仓</span></td><td><span class="tag tag-crowded">拥挤空头</span></td></tr><tr><td>英镑/美元</td><td></td><td class="pos">17,979</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:20%"></div><span class="zbar-label neg">-1.2</span></td><td class="pos">1,706 (0.2z)</td><td class="pos">57,660</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:25%"></div><span class="zbar-label neg">-1.5</span></td><td class="pos">5,563 (0.8z)</td><td class="pos">39,681</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:7%"></div><span class="zbar-label neg">-0.4</span></td><td class="pos">3,857 (0.7z)</td><td></td><td></td></tr><tr><td>日元/美元</td><td></td><td class="neg">-90,083</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:13%"></div><span class="zbar-label neg">-0.8</span></td><td class="pos">25,317 (2.3z)</td><td class="pos">84,990</td><td class="zbar"><div class="zbar-inner zbar-pos" style="width:28%"></div><span class="zbar-label pos">1.7</span></td><td class="neg">-2,447 (-0.5z)</td><td class="pos">175,073</td><td class="zbar"><div class="zbar-inner zbar-pos" style="width:23%"></div><span class="zbar-label pos">1.4</span></td><td class="neg">-27,764 (-2.8z)</td><td></td><td></td></tr><tr><td>澳元/美元</td><td></td><td class="pos">29,683</td><td class="zbar"><div class="zbar-inner zbar-pos" style="width:22%"></div><span class="zbar-label pos">1.3</span></td><td class="neg">-2,094 (-0.3z)</td><td class="pos">59,300</td><td class="zbar"><div class="zbar-inner zbar-pos" style="width:25%"></div><span class="zbar-label pos">1.5</span></td><td class="neg">-4,836 (-0.8z)</td><td class="pos">29,617</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:12%"></div><span class="zbar-label neg">-0.7</span></td><td class="neg">-2,742 (-0.6z)</td><td></td><td></td></tr><tr><td>比特币</td><td></td><td class="neg">-6,717</td><td class="zbar"><div class="zbar-inner zbar-pos" style="width:28%"></div><span class="zbar-label pos">1.7</span></td><td class="neg">-1,404 (-1.3z)</td><td class="pos">4,406</td><td class="zbar"><div class="zbar-inner zbar-pos" style="width:33%"></div><span class="zbar-label pos">2.0</span></td><td class="neg">-1,002 (-1.3z)</td><td class="pos">11,123</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:13%"></div><span class="zbar-label neg">-0.8</span></td><td class="pos">402 (0.4z)</td><td><span class="tag tag-bear">多头平仓</span></td><td><span class="tag tag-crowded">拥挤多头</span></td></tr></tbody>
+    </table>
+    <div class="source">数据来源: CFTC Traders in Financial Futures</div>
+
+    <br>
+
+    <h3 style="color:var(--orange);margin-bottom:8px">管理资金 Managed Money（COT 分类报告）</h3>
+    <table>
+        <thead>
+            <tr>
+                <th rowspan="2">资产</th>
+                <th rowspan="2" class="group-header">同期涨跌</th>
+                <th colspan="3" class="group-header">净持仓</th>
+                <th colspan="3" class="group-header">多头</th>
+                <th colspan="3" class="group-header">空头</th>
+                <th rowspan="2" class="group-header">动作</th>
+                <th rowspan="2" class="group-header">拥挤度</th>
+            </tr>
+            <tr>
+        <th>净持仓</th><th>z</th><th>周变化</th>
+        <th>多头</th><th>z</th><th>周变化</th>
+        <th>空头</th><th>z</th><th>周变化</th>
+    </tr>
+        </thead>
+        <tbody><tr class="section-row"><td colspan="13">能源</td></tr><tr><td>WTI原油</td><td></td><td class="pos">64,041</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:13%"></div><span class="zbar-label neg">-0.8</span></td><td class="neg">-17,241 (-0.6z)</td><td class="pos">193,113</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:7%"></div><span class="zbar-label neg">-0.4</span></td><td class="neg">-10,488 (-0.6z)</td><td class="pos">129,072</td><td class="zbar"><div class="zbar-inner zbar-pos" style="width:20%"></div><span class="zbar-label pos">1.2</span></td><td class="pos">6,753 (0.4z)</td><td></td><td></td></tr><tr><td>天然气</td><td></td><td class="neg">-60,295</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:3%"></div><span class="zbar-label neg">-0.2</span></td><td class="pos">4,513 (0.2z)</td><td class="pos">238,317</td><td class="zbar"><div class="zbar-inner zbar-pos" style="width:10%"></div><span class="zbar-label pos">0.6</span></td><td class="pos">17,029 (1.4z)</td><td class="pos">298,612</td><td class="zbar"><div class="zbar-inner zbar-pos" style="width:8%"></div><span class="zbar-label pos">0.5</span></td><td class="pos">12,516 (0.5z)</td><td></td><td></td></tr><tr class="section-row"><td colspan="13">金属</td></tr><tr><td>铜</td><td></td><td class="pos">58,784</td><td class="zbar"><div class="zbar-inner zbar-pos" style="width:18%"></div><span class="zbar-label pos">1.1</span></td><td class="neg">-919 (-0.1z)</td><td class="pos">74,757</td><td class="zbar"><div class="zbar-inner zbar-pos" style="width:3%"></div><span class="zbar-label pos">0.2</span></td><td class="neg">-1,124 (-0.2z)</td><td class="pos">15,973</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:18%"></div><span class="zbar-label neg">-1.1</span></td><td class="neg">-205 (-0.0z)</td><td></td><td></td></tr><tr><td>黄金</td><td></td><td class="pos">116,161</td><td class="zbar"><div class="zbar-inner zbar-pos" style="width:8%"></div><span class="zbar-label pos">0.5</span></td><td class="neg">-3,930 (-0.3z)</td><td class="pos">134,941</td><td class="zbar"><div class="zbar-inner zbar-pos" style="width:5%"></div><span class="zbar-label pos">0.3</span></td><td class="pos">364 (0.0z)</td><td class="pos">18,780</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:12%"></div><span class="zbar-label neg">-0.7</span></td><td class="pos">4,294 (0.6z)</td><td></td><td></td></tr><tr><td>白银</td><td></td><td class="pos">13,201</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:5%"></div><span class="zbar-label neg">-0.3</span></td><td class="neg">-581 (-0.1z)</td><td class="pos">19,294</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:18%"></div><span class="zbar-label neg">-1.1</span></td><td class="neg">-55 (0.0z)</td><td class="pos">6,093</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:17%"></div><span class="zbar-label neg">-1.0</span></td><td class="pos">526 (0.2z)</td><td></td><td></td></tr><tr class="section-row"><td colspan="13">农产品</td></tr><tr><td>玉米</td><td></td><td class="neg">-14,999</td><td class="zbar"><div class="zbar-inner zbar-pos" style="width:5%"></div><span class="zbar-label pos">0.3</span></td><td class="pos">51,997 (1.2z)</td><td class="pos">287,447</td><td class="zbar"><div class="zbar-inner zbar-pos" style="width:13%"></div><span class="zbar-label pos">0.8</span></td><td class="neg">-5,844 (-0.3z)</td><td class="pos">302,446</td><td class="zbar"><div class="zbar-inner zbar-neg" style="width:2%"></div><span class="zbar-label neg">-0.1</span></td><td class="neg">-57,841 (-2.0z)</td><td><span class="tag tag-bull">空头回补</span></td><td></td></tr></tbody>
+    </table>
+    <div class="source">数据来源: CFTC Disaggregated COT</div>
+
+    <div class="notes">
+        <strong>说明</strong>
+        <ul>
+            <li>z-score = (当前值 - 156周均值) / 156周标准差（3年窗口）</li>
+            <li>周变化 = 周环比合约数变化（括号内为该变化的z-score）</li>
+            <li>净持仓 = 多头 - 空头 | 同期涨跌 = CFTC报告期 Tue→Tue 价格变动</li>
+            <li>动作: 多头建仓/平仓、空头建仓/回补、多头挤压/空头施压、多空双增/双减</li>
+            <li>拥挤度: net/long/short z 任一 ≥ 2.0 → 拥挤 | ≥ 2.75 → 极端</li>
+            <li><span class="divergence" style="padding:1px 6px;font-size:10px">黄色高亮</span> = 动作与同期价格背离（如看多资金+价格下跌，或看空资金+价格上涨）</li>
+            <li>MSCI新兴/发达市场同期涨跌使用EEM/EFA (ETF代理†)，MSCI指数本身在yfinance不可用</li>
+        </ul>
+    </div>
+
+
+    <br>
+    <h3 style="color:var(--orange);margin-bottom:8px">同期涨跌验证明细 (Tue→Tue)</h3>
+    <table>
+        <thead><tr>
+            <th>资产</th><th>Ticker</th><th>起始日</th><th>起始收盘</th><th>截止日</th><th>截止收盘</th><th>涨跌</th>
+        </tr></thead>
+        <tbody><tr><td>标普500</td><td style="color:#666">^GSPC</td><td>06/30</td><td style="text-align:right">7,499.36</td><td>07/07</td><td style="text-align:right">7,503.85</td><td class="pos" style="text-align:right;font-weight:600">+0.06%</td></tr><tr><td>纳斯达克100</td><td style="color:#666">^NDX</td><td>06/30</td><td style="text-align:right">26,213.72</td><td>07/07</td><td style="text-align:right">25,818.69</td><td class="neg" style="text-align:right;font-weight:600">-1.51%</td></tr><tr><td>罗素2000</td><td style="color:#666">^RUT</td><td>06/30</td><td style="text-align:right">300.45</td><td>07/07</td><td style="text-align:right">296.19</td><td class="neg" style="text-align:right;font-weight:600">-1.42%</td></tr><tr><td>MSCI新兴市场</td><td style="color:#666">EEM</td><td>06/30</td><td style="text-align:right">68.41</td><td>07/07</td><td style="text-align:right">65.72</td><td class="neg" style="text-align:right;font-weight:600">-3.93%</td></tr><tr><td>MSCI发达市场</td><td style="color:#666">EFA</td><td>06/30</td><td style="text-align:right">103.88</td><td>07/07</td><td style="text-align:right">104.16</td><td class="pos" style="text-align:right;font-weight:600">+0.27%</td></tr><tr><td>2年期美债</td><td style="color:#666">ZT=F</td><td>06/30</td><td style="text-align:right">82.11</td><td>07/07</td><td style="text-align:right">81.86</td><td class="neg" style="text-align:right;font-weight:600">-0.30%</td></tr><tr><td>10年期美债</td><td style="color:#666">ZN=F</td><td>06/30</td><td style="text-align:right">94.57</td><td>07/07</td><td style="text-align:right">93.70</td><td class="neg" style="text-align:right;font-weight:600">-0.92%</td></tr><tr><td>超长期美债</td><td style="color:#666">UB=F</td><td>06/30</td><td style="text-align:right">86.42</td><td>07/07</td><td style="text-align:right">84.55</td><td class="neg" style="text-align:right;font-weight:600">-2.16%</td></tr><tr><td>联邦基金</td><td style="color:#666">ZQ=F</td><td>06/30</td><td style="text-align:right">110.35</td><td>07/07</td><td style="text-align:right">110.10</td><td class="neg" style="text-align:right;font-weight:600">-0.23%</td></tr></tbody>
+    </table>
+    <div class="source">数据来源: yfinance API | 取每个日期当天或之前最近交易日的收盘价</div>
+
+</body>
+</html>
