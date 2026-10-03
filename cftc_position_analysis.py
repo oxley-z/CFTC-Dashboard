@@ -34,6 +34,16 @@ CFTC_DISAGG_URL = "https://publicreporting.cftc.gov/resource/72hh-3qpy.json"
 LOOKBACK_DAYS = 1200  # ~3.3年, 确保有足够历史数据
 ZSCORE_WINDOW = 156   # 3年 = 156周
 
+# ★ 报告输出目录（与 cftc_generate_dashboard.py 保持一致）
+REPORT_DIR = "report"
+REPORT_FILE_STEM = "cftc_持仓报告_"
+REPORT_FILE_EXT  = ".html"
+
+# ★ 汇总面板文件名（位于项目根目录，即脚本同级）
+#    周报位于 report/ 子目录，因此返回链接使用 ../<面板文件名>
+DASHBOARD_FILENAME = "CFTC_交互式深度分析面板.html"
+DASHBOARD_BACK_URL = f"../{DASHBOARD_FILENAME}"
+
 # ============================================================================
 # CONTRACT MAPPINGS
 # ============================================================================
@@ -409,6 +419,28 @@ header { border-bottom: 3px solid var(--orange); padding-bottom: 12px; margin-bo
 header h1 { font-size: 22px; font-weight: 700; color: var(--orange); }
 header .meta { font-size: 12px; color: #666; text-align: right; }
 
+/* ★ 返回分析面板按钮 */
+header .header-left { display: flex; align-items: center; gap: 16px; }
+.back-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 16px; font-size: 13px; font-weight: 600;
+    color: #fff; background: var(--blue);
+    border-radius: 6px; text-decoration: none;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(68, 114, 196, 0.25);
+    white-space: nowrap;
+}
+.back-btn:hover {
+    background: #35578f;
+    transform: translateX(-2px);
+    box-shadow: 0 4px 10px rgba(68, 114, 196, 0.4);
+}
+.back-btn::before { content: "←"; font-size: 15px; font-weight: 700; }
+
+@media print {
+    .back-btn { display: none !important; }
+}
+
 table { border-collapse: collapse; width: 100%; font-size: 12px; margin-bottom: 4px; }
 thead th { background: var(--blue); color: #fff; font-weight: 600; font-size: 11px;
            padding: 7px 6px; text-align: center; border: 1px solid #3a62a0; white-space: nowrap; }
@@ -620,7 +652,10 @@ def generate_html(df_tff, df_disagg, report_date, price_data=None):
 </head>
 <body>
     <header>
-        <h1>CFTC 期货持仓分析</h1>
+        <div class="header-left">
+            <a class="back-btn" href="{DASHBOARD_BACK_URL}" title="返回 CFTC 交互式深度分析面板">返回分析面板</a>
+            <h1>CFTC 期货持仓分析</h1>
+        </div>
         <div class="meta">数据截止 {escape(report_date)}<br>生成时间 {escape(now)}<br>数据来源: CFTC Socrata API + yfinance</div>
     </header>
 
@@ -680,6 +715,78 @@ def generate_html(df_tff, df_disagg, report_date, price_data=None):
 </body>
 </html>"""
 
+# ============================================================================
+# BATCH PROCESSING (合并自 cftc_batch_executor.py)
+# ============================================================================
+
+def get_tuesdays(start_str, end_str):
+    """计算日期范围内所有的周二（CFTC 报告日）"""
+    start = datetime.strptime(start_str, "%Y-%m-%d")
+    end = datetime.strptime(end_str, "%Y-%m-%d")
+    tuesdays = []
+    curr = start
+    while curr <= end:
+        if curr.weekday() == 1:  # 1 = Tuesday
+            tuesdays.append(curr.strftime("%Y-%m-%d"))
+        curr += timedelta(days=1)
+    return tuesdays
+
+
+def process_single_date(df_tff, df_disagg, target_date, output_dir,
+                        strict_date=False, quiet=False):
+    """处理单个目标日期，生成一份 HTML 报告。
+
+    参数:
+        df_tff, df_disagg: 已抓取的完整 CFTC DataFrame
+        target_date:       目标日期 (YYYY-MM-DD)
+        output_dir:        输出目录
+        strict_date:       True 时要求 report_date == target_date 才生成
+                           (批量模式使用，避免为节假日生成重复文件)
+        quiet:             是否精简日志输出
+
+    返回: (status, report_date)
+        status ∈ {'created', 'skipped', 'no_data', 'no_match', 'failed'}
+    """
+    try:
+        cutoff = pd.Timestamp(target_date)
+        tff_cut = df_tff[df_tff['report_date'] <= cutoff]
+        disagg_cut = df_disagg[df_disagg['report_date'] <= cutoff]
+
+        if tff_cut.empty:
+            return 'no_data', None
+
+        report_date = tff_cut['report_date'].max().strftime('%Y-%m-%d')
+
+        # 批量模式下：报告日期必须与目标周二严格匹配，否则视为"该周无数据"
+        if strict_date and report_date != target_date:
+            return 'no_match', report_date
+
+        expected_file = os.path.join(
+            output_dir,
+            f'{REPORT_FILE_STEM}{report_date}{REPORT_FILE_EXT}'
+        )
+        if os.path.exists(expected_file):
+            return 'skipped', report_date
+
+        # 抓取该周的 Tue→Tue 价格变动
+        all_contracts = TFF_CONTRACTS + DISAGG_CONTRACTS
+        price_data = fetch_tue_tue_returns(all_contracts, report_date)
+
+        # 构建表格
+        df_t12_tff = build_table12_tff(tff_cut, TFF_CONTRACTS, price_data)
+        df_t12_disagg = build_table12_disagg(disagg_cut, DISAGG_CONTRACTS, price_data)
+
+        # 生成 HTML
+        html = generate_html(df_t12_tff, df_t12_disagg, report_date, price_data)
+        with open(expected_file, 'w', encoding='utf-8') as f:
+            f.write(html)
+
+        return 'created', report_date
+
+    except Exception as e:
+        if not quiet:
+            print(f"\n    ⚠️ 处理 {target_date} 异常: {e}")
+        return 'failed', None
 
 # ============================================================================
 # HELP DISPLAY
@@ -689,110 +796,203 @@ def print_help():
     help_text = """
 =============================================================
 CFTC 持仓分析工具 (CFTC Positioning Replicator)
+          —— 支持单日 / 批量模式
 =============================================================
 复制 JPM Delta-One Table 12: Traders in Financial Futures & COT Disaggregated
 
 数据来源: CFTC Socrata API (免费, 无需API key)
-输出: 在当前目录的 `0_持仓报告` 文件夹下生成 HTML 报告。
+输出: 在当前目录的 `report` 文件夹下生成 HTML 报告。
 
-用法 (Usage):
-    python cftc_持仓分析.py              # 获取最新一期的持仓数据
-    python cftc_持仓分析.py --date <日期> # 获取指定日期的持仓数据 (格式: YYYY-MM-DD)
-    python cftc_持仓分析.py -h, --help   # 显示此帮助信息
+【模式一】最新一期
+    python cftc_position_analysis.py
 
-示例 (Examples):
-    python cftc_持仓分析.py
-    python cftc_持仓分析.py --date 2026-03-17
+【模式二】指定单个日期
+    python cftc_position_analysis.py --date 2025-02-04
+    python cftc_position_analysis.py --date 2025-02-04   (位置参数亦可)
+
+【模式三】批量抓取一段区间内所有周二
+    python cftc_position_analysis.py --start 2025-01-01 --end 2026-04-10
+    python cftc_position_analysis.py 2025-01-01 2026-04-10   (位置参数)
+
+其它:
+    -h, --help    显示此帮助信息
+
+说明:
+    · 批量模式会一次性拉取所有 CFTC 数据，再逐周生成 HTML（比循环调用快得多）
+    · 已存在的报告文件会自动跳过
+    · 遇节假日的周二（无新数据）自动跳过，不会重复生成
 =============================================================
 """
     print(help_text)
 
-# ============================================================================
-# MAIN
-# ============================================================================
+def _parse_argv(argv):
+    """解析命令行参数，同时兼容 --date/--start/--end 与位置参数。"""
+    target_date = None
+    batch_start = None
+    batch_end = None
+    positional = []
+
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a in ('-h', '--help'):
+            print_help()
+            sys.exit(0)
+        elif a == '--date' and i + 1 < len(argv):
+            target_date = argv[i + 1]; i += 2
+        elif a == '--start' and i + 1 < len(argv):
+            batch_start = argv[i + 1]; i += 2
+        elif a == '--end' and i + 1 < len(argv):
+            batch_end = argv[i + 1]; i += 2
+        elif a.startswith('-'):
+            i += 1
+        else:
+            positional.append(a); i += 1
+
+    # 位置参数解析（与 batch_executor 兼容）
+    if not (batch_start and batch_end) and len(positional) >= 2:
+        batch_start, batch_end = positional[0], positional[1]
+    elif not target_date and not batch_start and len(positional) == 1:
+        target_date = positional[0]
+
+    return target_date, batch_start, batch_end
+
+
+def _validate_date(s):
+    try:
+        datetime.strptime(s, '%Y-%m-%d')
+        return True
+    except (ValueError, TypeError):
+        return False
+
 
 def main():
-    # 检查是否传入帮助命令
-    if '-h' in sys.argv or '--help' in sys.argv:
-        print_help()
-        sys.exit(0)
+    target_date, batch_start, batch_end = _parse_argv(sys.argv[1:])
 
-    target_date = None
-    if '--date' in sys.argv:
-        idx = sys.argv.index('--date')
-        if idx + 1 < len(sys.argv):
-            target_date = sys.argv[idx + 1]
+    # 参数校验
+    for label, val in (('--date', target_date),
+                       ('--start', batch_start),
+                       ('--end', batch_end)):
+        if val is not None and not _validate_date(val):
+            print(f"❌ 错误: {label} 日期格式不正确，应为 YYYY-MM-DD（例如 2025-02-04）\n")
+            print_help()
+            sys.exit(1)
 
-    output_dir = "0_持仓报告"
-    
-    # 提前检查：如果指定了日期，且该日期的文件已存在于文件夹中，则直接跳过下载
-    if target_date:
-        expected_file = os.path.join(output_dir, f'cftc_持仓报告_{target_date}.html')
-        if os.path.exists(expected_file):
-            print(f"⏭️ 目标文件 {expected_file} 已存在，跳过下载与生成。")
-            return
+    if batch_start and batch_end and batch_start > batch_end:
+        print("❌ 错误: --start 不能晚于 --end\n")
+        sys.exit(1)
 
-    start_date = (datetime.now() - timedelta(days=LOOKBACK_DAYS)).strftime('%Y-%m-%d')
+    if (batch_start and not batch_end) or (batch_end and not batch_start):
+        print("❌ 错误: 批量模式必须同时指定 --start 和 --end\n")
+        sys.exit(1)
 
-    print("=" * 50)
+    output_dir = REPORT_DIR
+    os.makedirs(output_dir, exist_ok=True)
+
+    print("=" * 60)
     print("CFTC Positioning Replicator")
-    if target_date:
-        print(f"  Target date: {target_date}")
-    print("=" * 50)
+    if batch_start and batch_end:
+        print(f"  MODE: BATCH   {batch_start}  ~  {batch_end}")
+    elif target_date:
+        print(f"  MODE: SINGLE  target = {target_date}")
+    else:
+        print(f"  MODE: LATEST")
+    print("=" * 60)
 
-    # 1. Fetch CFTC data
-    print("\n[1/3] Fetching CFTC data...")
-    print("  TFF...")
-    df_tff = fetch_cftc(CFTC_TFF_URL, start_date)
+    # 决定 CFTC 抓取的起始日（向后回退 LOOKBACK_DAYS 以保证 z-score 历史充足）
+    if batch_start:
+        earliest_target = batch_start
+    elif target_date:
+        earliest_target = target_date
+    else:
+        earliest_target = datetime.now().strftime('%Y-%m-%d')
+
+    fetch_start = (datetime.strptime(earliest_target, '%Y-%m-%d')
+                   - timedelta(days=LOOKBACK_DAYS)).strftime('%Y-%m-%d')
+
+    # ---- 1. 抓取 CFTC 数据（一次） ----
+    print(f"\n[1/2] Fetching CFTC data since {fetch_start} ...")
+    print("  TFF ...")
+    df_tff = fetch_cftc(CFTC_TFF_URL, fetch_start)
     print(f"    -> {len(df_tff)} rows")
-
-    print("  Disaggregated...")
-    df_disagg = fetch_cftc(CFTC_DISAGG_URL, start_date)
+    print("  Disaggregated ...")
+    df_disagg = fetch_cftc(CFTC_DISAGG_URL, fetch_start)
     print(f"    -> {len(df_disagg)} rows")
 
-    if target_date:
-        cutoff = pd.Timestamp(target_date)
-        df_tff = df_tff[df_tff['report_date'] <= cutoff]
-        df_disagg = df_disagg[df_disagg['report_date'] <= cutoff]
+    if df_tff.empty:
+        print("\n❌ CFTC 数据为空，无法继续。")
+        return
 
-    report_date = df_tff['report_date'].max().strftime('%Y-%m-%d') if not df_tff.empty else 'N/A'
-    print(f"  Report date: {report_date}")
+    latest_report_date = df_tff['report_date'].max().strftime('%Y-%m-%d')
+    print(f"  最新可用的 report_date = {latest_report_date}")
 
-    # 二次检查：如果在没传 --date 跑最新数据的情况下发现文件已存在，也可在此拦截
-    if not target_date and report_date != 'N/A':
-        expected_file = os.path.join(output_dir, f'cftc_持仓报告_{report_date}.html')
-        if os.path.exists(expected_file):
-            print(f"⏭️ 最新报告 {expected_file} 已存在，跳过剩余步骤。")
+    # ---- 2. 处理目标日期 ----
+    if batch_start and batch_end:
+        # ============ 批量模式 ============
+        tuesdays = get_tuesdays(batch_start, batch_end)
+        if not tuesdays:
+            print(f"\n⚠️ 在 {batch_start} 至 {batch_end} 期间没有任何周二。")
             return
 
-    # 2. Fetch price data (Tue→Tue 同期价格变动)
-    print("\n[2/4] Fetching price data (Tue→Tue)...")
-    all_contracts = TFF_CONTRACTS + DISAGG_CONTRACTS
-    price_data = fetch_tue_tue_returns(all_contracts, report_date)
-    print(f"  -> {len(price_data)}/{len([c for c in all_contracts if c.get('yf')])} instruments")
+        print(f"\n[2/2] Batch processing  |  {len(tuesdays)} 个周二待处理")
+        print("-" * 60)
 
-    # 3. Build tables
-    print("\n[3/4] Building tables...")
-    df_t12_tff = build_table12_tff(df_tff, TFF_CONTRACTS, price_data)
-    df_t12_disagg = build_table12_disagg(df_disagg, DISAGG_CONTRACTS, price_data)
-    print(f"  TFF: {len(df_t12_tff)} instruments | Disagg: {len(df_t12_disagg)} instruments")
+        stats = {'created': 0, 'skipped': 0, 'no_match': 0,
+                 'no_data': 0, 'failed': 0}
 
-    # 4. Write HTML
-    print("\n[4/4] Writing HTML...")
-    html = generate_html(df_t12_tff, df_t12_disagg, report_date, price_data)
+        try:
+            for idx, d in enumerate(tuesdays, 1):
+                print(f"[{idx}/{len(tuesdays)}] {d} ...", end=' ', flush=True)
+                status, rd = process_single_date(
+                    df_tff, df_disagg, d, output_dir,
+                    strict_date=True, quiet=True
+                )
+                if status == 'created':
+                    print(f"✅ 生成 {rd}")
+                    stats['created'] += 1
+                elif status == 'skipped':
+                    print(f"⏭️ 已存在 ({rd})")
+                    stats['skipped'] += 1
+                elif status == 'no_match':
+                    print(f"⏭️ 非报告日 (最近: {rd})")
+                    stats['no_match'] += 1
+                elif status == 'no_data':
+                    print("⏭️ 无可用数据")
+                    stats['no_data'] += 1
+                else:
+                    print("❌ 失败")
+                    stats['failed'] += 1
+        except KeyboardInterrupt:
+            print("\n\n🛑 检测到 Ctrl+C，已安全中断。已完成的任务数据已保存。")
 
-    os.makedirs(output_dir, exist_ok=True)
-    output_file = os.path.join(output_dir, f'cftc_持仓报告_{report_date}.html')
+        print("-" * 60)
+        print(f"批量完成: 生成 {stats['created']} | 跳过 {stats['skipped']} "
+              f"| 非报告日 {stats['no_match']} | 无数据 {stats['no_data']} "
+              f"| 失败 {stats['failed']}")
 
-    with open(output_file, 'w', encoding='utf-8') as f:
-        f.write(html)
-    print(f"  -> {output_file}")
+    else:
+        # ============ 单日 / 最新模式 ============
+        if target_date is None:
+            target_date = latest_report_date
+            print(f"\n[2/2] LATEST mode: 使用最新报告日 {target_date}")
+        else:
+            print(f"\n[2/2] SINGLE mode: 目标日期 {target_date}")
 
-    # Preview
-    if not df_t12_tff.empty:
-        print(f"\n--- Leveraged Funds Preview ---")
-        cols = ['Instrument', 'net', 'net_z', 'net_ww', 'long', 'long_ww', 'short', 'short_ww']
-        print(df_t12_tff[cols].head(8).to_string(index=False))
+        status, rd = process_single_date(
+            df_tff, df_disagg, target_date, output_dir,
+            strict_date=False
+        )
+
+        if status == 'created':
+            print(f"✅ 生成: {os.path.join(output_dir, f'cftc_持仓报告_{rd}.html')}")
+        elif status == 'skipped':
+            print(f"⏭️ 文件已存在: {os.path.join(output_dir, f'cftc_持仓报告_{rd}.html')}")
+        elif status == 'no_data':
+            print("❌ 该日期之前没有可用的 CFTC 数据")
+        elif status == 'no_match':
+            print(f"⚠️ 目标日期 {target_date} 无对应报告，最近一期为 {rd}")
+        else:
+            print("❌ 处理失败")
 
 
 if __name__ == '__main__':

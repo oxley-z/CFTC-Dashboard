@@ -13,13 +13,22 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # ================= 配置区 =================
-DATA_DIR = "0_持仓报告"
-os.makedirs(DATA_DIR, exist_ok=True)  # 确保目标文件夹存在
+# ★ 报告源文件 / 缓存 / 数据导出 统一放在 report 文件夹
+REPORT_DIR = "report"
+os.makedirs(REPORT_DIR, exist_ok=True)
 
-HTML_PATTERN = os.path.join(DATA_DIR, "cftc_持仓报告_*.html")
-OUTPUT_FILE = os.path.join(DATA_DIR, "CFTC_交互式深度分析面板.html")
-PRICE_CACHE_FILE = os.path.join(DATA_DIR, "cftc_价格历史缓存.json")
-DATA_EXPORT_FILE = os.path.join(DATA_DIR, "cftc_面板完整数据.json")
+# ★ 生成的分析面板输出到【当前文件夹】（与脚本同级）
+OUTPUT_FILE = "cftc_dashboard.html"
+
+# 持仓报告 HTML 命名规则：report/cftc_持仓报告_YYYY-MM-DD.html
+HTML_PATTERN = os.path.join(REPORT_DIR, "cftc_持仓报告_*.html")
+# 供前端日历点击时拼接 URL 使用的相对前缀（必须以 / 结尾）
+REPORT_URL_PREFIX = REPORT_DIR + "/"
+REPORT_FILE_STEM = "cftc_持仓报告_"
+REPORT_FILE_EXT = ".html"
+
+PRICE_CACHE_FILE = os.path.join(REPORT_DIR, "cftc_价格历史缓存.json")
+DATA_EXPORT_FILE = os.path.join(REPORT_DIR, "cftc_面板完整数据.json")
 
 # 针对不同资产配置最优的数据源映射策略
 ASSET_CONFIG = {
@@ -339,7 +348,10 @@ def generate_dashboard(df):
         pass
 
     latest_date = df['Date'].max().strftime('%Y-%m-%d')
-    
+
+    # ★ 收集所有报告日期（供前端日历高亮 & 点击跳转）
+    report_dates = sorted(df['Date'].dt.strftime('%Y-%m-%d').unique().tolist())
+
     html_template = f"""
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -348,7 +360,7 @@ def generate_dashboard(df):
     <title>CFTC 全维度智能量价面板</title>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
     <style>
-        body {{ display: flex; height: 100vh; margin: 0; font-family: sans-serif; background: #f0f2f5; }}
+        body {{ display: flex; height: 100vh; margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background: #f0f2f5; }}
         #sidebar {{ width: 280px; background: #fff; border-right: 1px solid #ddd; display: flex; flex-direction: column; }}
         .search-box {{ padding: 15px; border-bottom: 1px solid #eee; background: #fafafa; }}
         #assetSearch {{ width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; outline: none; font-size: 14px; transition: border-color 0.2s; }}
@@ -357,6 +369,122 @@ def generate_dashboard(df):
         .asset-btn {{ width: 100%; text-align: left; padding: 12px 15px; margin-bottom: 6px; border: none; background: transparent; cursor: pointer; border-radius: 6px; font-size: 14px; font-weight: 500; transition: all 0.2s; border-left: 4px solid transparent;}}
         .asset-btn:hover {{ background: #e6f7ff; color: #1890ff; }}
         .asset-btn.active {{ background: #e6f7ff; color: #1890ff; border-left: 4px solid #1890ff; font-weight: bold; }}
+        .home-btn {{ font-weight: bold !important; border-bottom: 1px dashed #eee; border-radius: 0 !important; margin-bottom: 0 !important; }}
+
+        /* ============ 日历组件 ============ */
+        .calendar-container {{
+            padding: 12px 12px 14px 12px;
+            border-bottom: 1px solid #eee;
+            background: #fafafa;
+            flex-shrink: 0;
+        }}
+        .calendar-header {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }}
+        .calendar-header .cal-title {{
+            font-size: 13px;
+            font-weight: 700;
+            color: #333;
+            user-select: none;
+        }}
+        .calendar-header button {{
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            font-size: 13px;
+            color: #666;
+            line-height: 1;
+            padding: 0;
+            transition: all 0.15s;
+        }}
+        .calendar-header button:hover {{
+            background: #e6f7ff;
+            color: #1890ff;
+            border-color: #1890ff;
+        }}
+        .calendar-header .cal-actions {{
+            display: flex;
+            gap: 4px;
+        }}
+        .calendar-weekdays {{
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 2px;
+            margin-bottom: 4px;
+        }}
+        .calendar-weekdays span {{
+            text-align: center;
+            font-size: 11px;
+            color: #999;
+            padding: 2px 0;
+            user-select: none;
+        }}
+        .calendar-grid {{
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 2px;
+        }}
+        .calendar-cell {{
+            text-align: center;
+            font-size: 11px;
+            padding: 5px 0;
+            border-radius: 4px;
+            color: #ccc;
+            user-select: none;
+            transition: all 0.15s;
+            min-height: 20px;
+            line-height: 1.2;
+        }}
+        .calendar-cell.empty {{
+            cursor: default;
+        }}
+        .calendar-cell.no-report {{
+            cursor: default;
+            color: #cfcfcf;
+        }}
+        .calendar-cell.has-report {{
+            background: #e6f7ff;
+            color: #1890ff;
+            font-weight: 700;
+            cursor: pointer;
+            border: 1px solid #91d5ff;
+        }}
+        .calendar-cell.has-report:hover {{
+            background: #1890ff;
+            color: #fff;
+            border-color: #1890ff;
+            transform: scale(1.12);
+            box-shadow: 0 2px 6px rgba(24, 144, 255, 0.4);
+        }}
+        .calendar-cell.today {{
+            outline: 2px solid #fa8c16;
+            outline-offset: -2px;
+        }}
+        .calendar-legend {{
+            margin-top: 8px;
+            display: flex;
+            gap: 10px;
+            font-size: 10px;
+            color: #999;
+            justify-content: center;
+        }}
+        .calendar-legend .dot {{
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 2px;
+            margin-right: 3px;
+            vertical-align: middle;
+        }}
+        .calendar-legend .dot.blue {{ background: #e6f7ff; border: 1px solid #91d5ff; }}
+        .calendar-legend .dot.gray {{ background: #f5f5f5; border: 1px solid #e0e0e0; }}
+
         #main {{ flex: 1; display: flex; flex-direction: column; padding: 20px; overflow: hidden; }}
         header {{ margin-bottom: 20px; background: #fff; padding: 20px 25px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }}
         h1 {{ margin: 0 0 8px 0; font-size: 22px; color: #1a1a1a; display: flex; align-items: center; gap: 10px; }}
@@ -370,6 +498,28 @@ def generate_dashboard(df):
         .info {{ color: #666; font-size: 14px; display: flex; flex-direction: column; gap: 5px; }}
         .sub-info {{ font-size: 13px; color: #888; }}
         #chart-container {{ flex: 1; background: #fff; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); padding: 20px; min-height: 400px; }}
+        
+        /* ============ 主页（数据总览）样式 ============ */
+        #homeView {{ display: none; flex: 1; overflow: hidden; flex-direction: column; }}
+        .stats-grid {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 15px; }}
+        .stat-card {{ background: #fff; padding: 18px 20px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border-left: 4px solid #1890ff; transition: transform 0.15s; }}
+        .stat-card:hover {{ transform: translateY(-2px); }}
+        .stat-card .label {{ color: #888; font-size: 13px; margin-bottom: 8px; }}
+        .stat-card .value {{ color: #1a1a1a; font-size: 24px; font-weight: 700; }}
+        .stat-card.c1 {{ border-left-color: #1890ff; }}
+        .stat-card.c2 {{ border-left-color: #722ed1; }}
+        .stat-card.c3 {{ border-left-color: #52c41a; }}
+        .stat-card.c4 {{ border-left-color: #fa8c16; }}
+        .summary-container {{ flex: 1; background: #fff; border-radius: 10px; padding: 20px 25px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); overflow: auto; }}
+        .summary-title {{ font-size: 16px; font-weight: 600; color: #1a1a1a; margin-bottom: 15px; display: flex; align-items: center; gap: 10px; }}
+        .summary-table {{ width: 100%; border-collapse: collapse; font-size: 14px; }}
+        .summary-table th {{ position: sticky; top: 0; background: #fafafa; padding: 12px; text-align: left; border-bottom: 2px solid #eee; font-weight: 600; color: #555; z-index: 1; }}
+        .summary-table td {{ padding: 11px 12px; border-bottom: 1px solid #f0f0f0; }}
+        .summary-table tbody tr {{ transition: background 0.15s; cursor: pointer; }}
+        .summary-table tbody tr:hover {{ background: #f5faff; }}
+        .pos {{ color: #d62728; font-weight: 600; }}
+        .neg {{ color: #2ca02c; font-weight: 600; }}
+        .neutral {{ color: #999; }}
     </style>
 </head>
 <body>
@@ -377,20 +527,86 @@ def generate_dashboard(df):
         <div class="search-box">
             <input type="text" id="assetSearch" placeholder="🔍 搜索资产 (如: 超长期美债, 10年期)">
         </div>
+        <div style="padding: 10px 10px 0 10px;">
+            <button class="asset-btn home-btn active" onclick="showHome()">数据总览</button>
+        </div>
+
+        <!-- ★ 新增：报告日历 -->
+        <div class="calendar-container">
+            <div class="calendar-header">
+                <button type="button" onclick="calPrevMonth()" title="上一月">‹</button>
+                <span class="cal-title" id="calMonthLabel">—</span>
+                <div class="cal-actions">
+                    <button type="button" onclick="calToday()" title="回到最新报告月">⊙</button>
+                    <button type="button" onclick="calNextMonth()" title="下一月">›</button>
+                </div>
+            </div>
+            <div class="calendar-weekdays">
+                <span>一</span><span>二</span><span>三</span><span>四</span>
+                <span>五</span><span>六</span><span>日</span>
+            </div>
+            <div class="calendar-grid" id="calendarGrid"></div>
+            <div class="calendar-legend">
+                <span><span class="dot blue"></span>有报告</span>
+                <span><span class="dot gray"></span>无报告</span>
+            </div>
+        </div>
+
         <div id="assetList"></div>
     </div>
     <div id="main">
         <header>
             <h1>
-                <span id="currentAsset">请选择资产</span>
+                <span id="currentAsset">📊 全资产数据总览</span>
                 <span id="typeBadge" class="badge-type"></span>
             </h1>
             <div class="info">
                 <span>统计区间: {df['Date'].min().strftime('%Y-%m-%d')} 至 {latest_date}</span>
-                <span class="sub-info" id="dataSourceDesc"></span>
+                <span class="sub-info" id="dataSourceDesc">点击左侧资产列表，或点击下方表格行，查看单资产的量价对冲详细分析</span>
             </div>
         </header>
-        <div id="chart-container">
+
+        <!-- ============ 主页 ============ -->
+        <div id="homeView">
+            <div class="stats-grid">
+                <div class="stat-card c1">
+                    <div class="label">追踪资产数量</div>
+                    <div class="value" id="statAssets">-</div>
+                </div>
+                <div class="stat-card c2">
+                    <div class="label">报告期数</div>
+                    <div class="value" id="statPeriods">-</div>
+                </div>
+                <div class="stat-card c3">
+                    <div class="label">数据起始日</div>
+                    <div class="value" id="statStart" style="font-size: 18px;">-</div>
+                </div>
+                <div class="stat-card c4">
+                    <div class="label">最新报告日</div>
+                    <div class="value" id="statEnd" style="font-size: 18px;">-</div>
+                </div>
+            </div>
+            <div class="summary-container">
+                <div class="summary-title">📋 全部资产最新持仓概览 <span style="font-size:12px;color:#999;font-weight:normal;">（点击任意行查看详情）</span></div>
+                <table class="summary-table">
+                    <thead>
+                        <tr>
+                            <th>资产名称</th>
+                            <th>最新日期</th>
+                            <th>净持仓 (手)</th>
+                            <th>环比变化</th>
+                            <th>多头 (手)</th>
+                            <th>空头 (手)</th>
+                            <th>最新价格</th>
+                        </tr>
+                    </thead>
+                    <tbody id="summaryBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ============ 单资产图表 ============ -->
+        <div id="chart-container" style="display:none;">
             <div id="chart" style="width: 100%; height: 100%;"></div>
         </div>
     </div>
@@ -398,8 +614,123 @@ def generate_dashboard(df):
     <script>
         const rawData = {json.dumps(full_data)};
         const assetList = Object.keys(rawData);
-        let myChart = echarts.init(document.getElementById('chart'));
+        let myChart = null;
 
+        // ★ 报告日期列表（由 Python 侧注入）
+        const reportDates = {json.dumps(report_dates)};
+        // ★ 报告 HTML 的 URL 前缀与命名模板（由 Python 侧注入）
+        const REPORT_URL_PREFIX = {json.dumps(REPORT_URL_PREFIX)};
+        const REPORT_FILE_STEM  = {json.dumps(REPORT_FILE_STEM)};
+        const REPORT_FILE_EXT   = {json.dumps(REPORT_FILE_EXT)};
+        const reportDateSet = new Set(reportDates);
+
+        // ============ 日历组件 ============
+        let calYear = 0;
+        let calMonth = 0;   // 0 ~ 11
+
+        function calInit() {{
+            if (reportDates.length > 0) {{
+                const latest = new Date(reportDates[reportDates.length - 1] + "T00:00:00");
+                calYear  = latest.getFullYear();
+                calMonth = latest.getMonth();
+            }} else {{
+                const now = new Date();
+                calYear  = now.getFullYear();
+                calMonth = now.getMonth();
+            }}
+            calRender();
+        }}
+
+        function calRender() {{
+            const label = document.getElementById('calMonthLabel');
+            const grid  = document.getElementById('calendarGrid');
+            if (!label || !grid) return;
+
+            label.innerText = calYear + "年" + (calMonth + 1) + "月";
+            grid.innerHTML = '';
+
+            const firstDay = new Date(calYear, calMonth, 1);
+            const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+
+            // 周一为第一列：getDay() 周日=0 → 转成 周一=0
+            let startWeekday = firstDay.getDay() - 1;
+            if (startWeekday < 0) startWeekday = 6;
+
+            // 上月补位
+            for (let i = 0; i < startWeekday; i++) {{
+                const cell = document.createElement('div');
+                cell.className = 'calendar-cell empty';
+                grid.appendChild(cell);
+            }}
+
+            const todayStr = (() => {{
+                const t = new Date();
+                const mm = String(t.getMonth() + 1).padStart(2, '0');
+                const dd = String(t.getDate()).padStart(2, '0');
+                return t.getFullYear() + '-' + mm + '-' + dd;
+            }})();
+
+            for (let d = 1; d <= daysInMonth; d++) {{
+                const mm = String(calMonth + 1).padStart(2, '0');
+                const dd = String(d).padStart(2, '0');
+                const dateStr = calYear + '-' + mm + '-' + dd;
+
+                const cell = document.createElement('div');
+                cell.className = 'calendar-cell';
+                cell.innerText = d;
+
+                if (dateStr === todayStr) cell.classList.add('today');
+
+                if (reportDateSet.has(dateStr)) {{
+                    cell.classList.add('has-report');
+                    cell.title = "查看 " + dateStr + " 的 CFTC 持仓报告";
+                    cell.onclick = () => {{
+                        const url = REPORT_URL_PREFIX + REPORT_FILE_STEM + dateStr + REPORT_FILE_EXT;
+                        window.location.href = url;
+                    }};
+                }} else {{
+                    cell.classList.add('no-report');
+                }}
+
+                grid.appendChild(cell);
+            }}
+        }}
+
+        function calPrevMonth() {{
+            calMonth--;
+            if (calMonth < 0) {{ calMonth = 11; calYear--; }}
+            calRender();
+        }}
+
+        function calNextMonth() {{
+            calMonth++;
+            if (calMonth > 11) {{ calMonth = 0; calYear++; }}
+            calRender();
+        }}
+
+        function calToday() {{
+            if (reportDates.length > 0) {{
+                const latest = new Date(reportDates[reportDates.length - 1] + "T00:00:00");
+                calYear  = latest.getFullYear();
+                calMonth = latest.getMonth();
+            }} else {{
+                const now = new Date();
+                calYear  = now.getFullYear();
+                calMonth = now.getMonth();
+            }}
+            calRender();
+        }}
+
+        window.addEventListener('resize', () => {{ if (myChart) myChart.resize(); }});
+
+        function getChart() {{
+            if (!myChart) {{
+                myChart = echarts.init(document.getElementById('chart'));
+            }}
+            return myChart;
+        }}
+
+        // ============ 侧边栏渲染 ============
         function renderAssetList(filter = '') {{
             const container = document.getElementById('assetList');
             container.innerHTML = '';
@@ -412,20 +743,110 @@ def generate_dashboard(df):
             }});
         }}
 
+        // ============ 主页切换 ============
+        function showHome() {{
+            document.querySelectorAll('.asset-btn').forEach(b => b.classList.remove('active'));
+            const homeBtn = document.querySelector('.home-btn');
+            if (homeBtn) homeBtn.classList.add('active');
+
+            document.getElementById('homeView').style.display = 'flex';
+            document.getElementById('chart-container').style.display = 'none';
+
+            document.getElementById('currentAsset').innerText = '📊 全资产数据总览';
+            const badge = document.getElementById('typeBadge');
+            badge.className = '';
+            badge.innerText = '';
+            document.getElementById('dataSourceDesc').innerText = '点击左侧资产列表，或点击下方表格行，查看单资产的量价对冲详细分析';
+        }}
+
+        // ============ 价格格式化 ============
+        function formatPrice(price, asset, cfg) {{
+            if (price === null || price === undefined) return '<span style="color:#bbb;">未获取</span>';
+            let decimals = 2;
+            if (cfg.type === 'us_yield') decimals = 3;
+            else if (asset.includes('/') || asset.includes('汇率')) decimals = 4;
+            return Number(price).toLocaleString(undefined, {{minimumFractionDigits: decimals, maximumFractionDigits: decimals}});
+        }}
+
+        // ============ 构建主页统计与汇总表 ============
+        function buildHomeView() {{
+            const allDates = new Set();
+            let assetCount = 0;
+            for (const asset in rawData) {{
+                const d = rawData[asset];
+                d.dates.forEach(x => allDates.add(x));
+                if (d.dates.length > 0) assetCount++;
+            }}
+            const sortedDates = [...allDates].sort();
+            document.getElementById('statAssets').innerText = assetCount + ' 个';
+            document.getElementById('statPeriods').innerText = sortedDates.length + ' 期';
+            document.getElementById('statStart').innerText = sortedDates[0] || '—';
+            document.getElementById('statEnd').innerText = sortedDates[sortedDates.length - 1] || '—';
+
+            const tbody = document.getElementById('summaryBody');
+            tbody.innerHTML = '';
+
+            for (const asset in rawData) {{
+                const d = rawData[asset];
+                const n = d.dates.length;
+                if (n === 0) continue;
+
+                const net = d.nets[n - 1];
+                const prevNet = n > 1 ? d.nets[n - 2] : null;
+                const change = prevNet !== null ? net - prevNet : null;
+                const price = d.prices[n - 1];
+
+                // 净持仓
+                const netHtml = net >= 0
+                    ? '<span class="pos">' + net.toLocaleString() + '</span>'
+                    : '<span class="neg">' + net.toLocaleString() + '</span>';
+
+                // 环比变化（中国习惯：红涨绿跌）
+                let changeHtml = '<span class="neutral">—</span>';
+                if (change !== null) {{
+                    if (change > 0) changeHtml = '<span class="pos">+' + change.toLocaleString() + '</span>';
+                    else if (change < 0) changeHtml = '<span class="neg">' + change.toLocaleString() + '</span>';
+                    else changeHtml = '<span class="neutral">0</span>';
+                }}
+
+                const tr = document.createElement('tr');
+                tr.innerHTML =
+                    '<td><strong>' + asset + '</strong></td>' +
+                    '<td>' + d.dates[n - 1] + '</td>' +
+                    '<td>' + netHtml + '</td>' +
+                    '<td>' + changeHtml + '</td>' +
+                    '<td>' + d.longs[n - 1].toLocaleString() + '</td>' +
+                    '<td>' + d.shorts[n - 1].toLocaleString() + '</td>' +
+                    '<td>' + formatPrice(price, asset, d.config) + '</td>';
+                tr.onclick = () => {{
+                    const btns = Array.from(document.querySelectorAll('.asset-btn'));
+                    const target = btns.find(b => b.innerText === asset);
+                    selectAsset(asset, target);
+                }};
+                tbody.appendChild(tr);
+            }}
+        }}
+
+        // ============ 单资产详情 ============
         function selectAsset(name, btnElement) {{
             document.querySelectorAll('.asset-btn').forEach(b => b.classList.remove('active'));
-            if(btnElement) btnElement.classList.add('active');
-            
+            if (btnElement) btnElement.classList.add('active');
+            const homeBtn = document.querySelector('.home-btn');
+            if (homeBtn) homeBtn.classList.remove('active');
+
+            document.getElementById('homeView').style.display = 'none';
+            document.getElementById('chart-container').style.display = 'block';
+
             document.getElementById('currentAsset').innerText = name + " - 量价对冲分析";
-            
+
             const data = rawData[name];
             const cfg = data.config;
-            
+
             const badge = document.getElementById('typeBadge');
             const desc = document.getElementById('dataSourceDesc');
             let priceAxisName = '资产价格';
             let tooltipUnit = '';
-            
+
             if (cfg.type === 'us_yield') {{
                 badge.className = 'badge-type type-yield';
                 badge.innerText = '宏观收益率曲线';
@@ -460,7 +881,7 @@ def generate_dashboard(df):
             }}
 
             const hasPrice = data.prices.some(p => p !== null);
-            
+
             const option = {{
                 tooltip: {{ 
                     trigger: 'axis', 
@@ -478,7 +899,7 @@ def generate_dashboard(df):
                                 if (cfg.type === 'us_yield') decimals = 3;
                                 else if (name.includes('/') || name.includes('汇率')) decimals = 4;
                                 else if (name.includes('比特币')) decimals = 2;
-                                
+
                                 val = Number(val).toLocaleString(undefined, {{
                                     minimumFractionDigits: decimals, 
                                     maximumFractionDigits: decimals
@@ -486,7 +907,7 @@ def generate_dashboard(df):
                             }} else if (val != null) {{
                                 val = Number(val).toLocaleString() + ' 手';
                             }}
-                            
+
                             html += '<div style="display:flex;justify-content:space-between;min-width:240px;margin:4px 0;">' +
                                     '<span>' + param.marker + param.seriesName + '</span>' + 
                                     '<span style="font-weight:bold; margin-left:15px;">' + (val == null ? '未获取' : val) + '</span>' +
@@ -538,20 +959,18 @@ def generate_dashboard(df):
                     }}
                 ]
             }};
-            myChart.setOption(option, true);
+            const chart = getChart();
+            chart.resize();
+            chart.setOption(option, true);
         }}
 
         document.getElementById('assetSearch').oninput = (e) => renderAssetList(e.target.value);
 
+        // ============ 初始化 ============
         renderAssetList();
-        if (assetList.length > 0) {{
-            const defaultAsset = assetList.includes('超长期美债') ? '超长期美债' : (assetList.includes('10年期美债') ? '10年期美债' : assetList[0]);
-            const btns = Array.from(document.querySelectorAll('.asset-btn'));
-            const targetBtn = btns.find(b => b.innerText === defaultAsset) || btns[0];
-            selectAsset(defaultAsset, targetBtn);
-        }}
-
-        window.onresize = () => myChart.resize();
+        buildHomeView();
+        showHome();
+        calInit();       // ★ 渲染日历
     </script>
 </body>
 </html>
@@ -563,7 +982,7 @@ def generate_dashboard(df):
 def main():
     files = sorted(glob.glob(HTML_PATTERN))
     if not files:
-        print(f"❌ 未找到 HTML 文件，请检查 {DATA_DIR} 目录。")
+        print(f"❌ 未找到 HTML 文件，请检查 {REPORT_DIR} 目录。")
         return
         
     all_data = []
